@@ -21,16 +21,15 @@ jobs:
       - name: 📥 检出代码
         uses: actions/checkout@v4
 
-      # 2. 配置 Node.js (按需修改版本)
+      # 2. 配置 Node.js
       - name: 🟢 设置 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          cache: "npm"
+          node-version: "22"
 
       # 3. 安装依赖
       - name: 📦 安装依赖
-        run: npm ci
+        run: npm install
 
       # 4. 代码风格检查
       - name: 🔍 Lint 检查
