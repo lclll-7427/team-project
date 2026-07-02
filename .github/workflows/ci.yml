@@ -1,0 +1,55 @@
+# GitHub Actions CI 工作流
+# 触发条件: push 或 PR 到 main 分支
+# 功能: 自动检查代码风格、运行测试、执行构建
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check-and-build:
+    name: 检查与构建
+    runs-on: ubuntu-latest
+
+    # 允许手动触发
+    workflow_dispatch:
+
+    steps:
+      # 1. 拉取代码
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      # 2. 配置 Node.js (按需修改版本)
+      - name: 🟢 设置 Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      # 3. 安装依赖
+      - name: 📦 安装依赖
+        run: npm ci
+
+      # 4. 代码风格检查
+      - name: 🔍 Lint 检查
+        run: npm run lint
+
+      # 5. 运行测试
+      - name: 🧪 运行测试
+        run: npm test
+
+      # 6. 构建
+      - name: 🏗️ 构建
+        run: npm run build
+
+      # 7. 构建产物上传 (可选, 方便下载查看)
+      - name: 📤 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: dist/
+          retention-days: 7
