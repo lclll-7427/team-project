@@ -48,6 +48,10 @@ echo ║  学生账号: student1 / 123456                 ║
 echo ╚══════════════════════════════════════════════╝
 echo.
 
+echo 按 Ctrl+C 停止服务
+echo.
 java -jar target\cvs-app.jar
 
+echo.
+echo 服务已停止。
 pause
