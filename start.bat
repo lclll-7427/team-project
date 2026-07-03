@@ -18,14 +18,21 @@ if %errorlevel% neq 0 (
 
 :: Check if jar exists
 if not exist "target\cvs-app.jar" (
-    echo  No build found. Run this in terminal first:
-    echo    mvnw.cmd package -DskipTests
-    echo.
+    echo  No build found. Run build.bat first.
     pause
     exit
 )
 
+:: Kill any existing instance on port 8080
+echo  Checking port 8080...
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":8080.*LISTENING"') do (
+    echo  Killing old process PID=%%a...
+    taskkill /PID %%a /F >nul 2>&1
+    timeout /t 2 /nobreak >nul
+)
+
 :: Run
+echo.
 echo  Starting: http://localhost:8080
 echo  Teacher: teacher1 / 123456
 echo  Student: student1 / 123456
