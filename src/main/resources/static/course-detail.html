@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>课程详情 - 课堂投票系统</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="header">
+  <h1>📊 课堂投票系统</h1>
+  <span class="user-info" id="user-info"></span>
+  <button onclick="logout()">退出登录</button>
+</div>
+
+<div class="nav-tabs">
+  <a href="/courses.html">课程列表</a>
+  <a href="javascript:void(0)" onclick="goStats()">数据统计</a>
+</div>
+
+<div class="container">
+  <h2 id="course-title" style="margin-bottom:1rem"></h2>
+
+  <div class="grid-2">
+    <!-- 左侧: 知识点列表 -->
+    <div>
+      <div class="card">
+        <h3>📚 知识点
+          <span id="kp-add-btn" class="hidden" style="float:right">
+            <button class="btn btn-primary btn-sm" onclick="showAddKpModal()">+ 添加</button>
+          </span>
+        </h3>
+        <div id="kp-list">加载中...</div>
+      </div>
+    </div>
+
+    <!-- 右侧: 投票列表 -->
+    <div>
+      <div class="card">
+        <h3>📋 投票列表
+          <span id="vote-add-btn" class="hidden" style="float:right">
+            <button class="btn btn-primary btn-sm" onclick="showCreateVoteModal()">+ 发起投票</button>
+          </span>
+        </h3>
+        <div id="vote-list">加载中...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 投票详情区 -->
+  <div class="card" id="vote-detail-card" class="hidden" style="display:none">
+    <h3 id="vote-detail-title"></h3>
+    <div id="vote-detail-content"></div>
+    <button class="btn btn-outline btn-sm" onclick="document.getElementById('vote-detail-card').style.display='none'">收起</button>
+  </div>
+</div>
+
+<!-- 弹窗 -->
+<div id="modal-overlay" class="modal-overlay hidden">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  const user = JSON.parse(sessionStorage.getItem('cvs_user'));
+  const courseId = sessionStorage.getItem('cvs_courseId');
+  if (!user) { window.location.href = '/login.html'; }
+  if (!courseId) { window.location.href = '/courses.html'; }
+
+  document.getElementById('user-info').textContent =
+    `${user.realName} (${user.role === 'TEACHER' ? '教师' : '学生'}) | ID: ${user.id}`;
+
+  function logout() { sessionStorage.clear(); window.location.href = '/login.html'; }
+  function goStats() { window.location.href = '/statistics.html'; }
+  function escHtml(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+  async function loadAll() {
+    try {
+      // 加载知识点
+      const kpRes = await API.getKnowledgePoints(courseId);
+      const kpList = document.getElementById('kp-list');
+      if (user.role === 'TEACHER') {
+        document.getElementById('kp-add-btn').classList.remove('hidden');
+      }
+      if (!kpRes.data || kpRes.data.length === 0) {
+        kpList.innerHTML = '<p style="color:var(--text-light)">暂无知识点</p>';
+      } else {
+        kpList.innerHTML = kpRes.data.map(kp => `
+          <div class="list-item">
+            <div>
+              <strong>${escHtml(kp.name)}</strong>
+              <div style="font-size:0.8rem;color:var(--text-light)">${escHtml(kp.description || '')}</div>
+            </div>
+            ${user.role === 'TEACHER' ? `<button class="btn btn-danger btn-sm" onclick="deleteKp(${kp.id})">删除</button>` : ''}
+          </div>
+        `).join('');
+      }
+
+      // 加载投票
+      const voteRes = await API.getCourseVotes(courseId);
+      const voteList = document.getElementById('vote-list');
+      if (user.role === 'TEACHER') {
+        document.getElementById('vote-add-btn').classList.remove('hidden');
+      }
+      if (!voteRes.data || voteRes.data.length === 0) {
+        voteList.innerHTML = '<p style="color:var(--text-light)">暂无投票</p>';
+      } else {
+        voteList.innerHTML = voteRes.data.map(v => `
+          <div class="list-item">
+            <div>
+              <strong>${escHtml(v.title)}</strong>
+              <div style="font-size:0.8rem">
+                <span class="badge ${v.status==='ACTIVE'?'badge-active':'badge-closed'}">${v.status==='ACTIVE'?'进行中':'已关闭'}</span>
+                知识点: ${escHtml(v.knowledgePointName)} | ${v.totalVotes} 人已投
+              </div>
+            </div>
+            <div style="display:flex;gap:0.3rem">
+              <button class="btn btn-outline btn-sm" onclick="viewVote(${v.id})">查看</button>
+              ${user.role==='TEACHER' && v.status==='ACTIVE' ? `<button class="btn btn-warning btn-sm" onclick="closeVote(${v.id})" style="background:var(--warning);color:#fff">关闭</button>` : ''}
+            </div>
+          </div>
+        `).join('');
+      }
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  async function deleteKp(kpId) {
+    if (!confirm('确定删除该知识点？')) return;
+    try { await API.deleteKnowledgePoint(kpId, user.id); loadAll(); }
+    catch (err) { alert(err.message); }
+  }
+
+  function showAddKpModal() {
+    document.getElementById('modal-overlay').classList.remove('hidden');
+    document.getElementById('modal-content').innerHTML = `
+      <h3>添加知识点</h3>
+      <div class="form-group"><label>名称</label><input id="kp-name" placeholder="知识点名称"></div>
+      <div class="form-group"><label>描述</label><textarea id="kp-desc" rows="2" placeholder="描述（可选）"></textarea></div>
+      <div style="display:flex;gap:0.5rem;justify-content:flex-end">
+        <button class="btn btn-outline btn-sm" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary btn-sm" onclick="addKp()">添加</button>
+      </div>
+    `;
+  }
+
+  async function addKp() {
+    const name = document.getElementById('kp-name').value.trim();
+    const description = document.getElementById('kp-desc').value.trim();
+    if (!name) return alert('请输入名称');
+    try {
+      await API.addKnowledgePoint(courseId, { teacherId: user.id, name, description });
+      closeModal();
+      loadAll();
+    } catch (err) { alert(err.message); }
+  }
+
+  function showCreateVoteModal() {
+    // 加载知识点列表作为选项
+    API.getKnowledgePoints(courseId).then(kpRes => {
+      const kps = kpRes.data || [];
+      if (kps.length === 0) { alert('请先添加知识点'); return; }
+      const kpOptions = kps.map(k => `<option value="${k.id}">${escHtml(k.name)}</option>`).join('');
+
+      document.getElementById('modal-overlay').classList.remove('hidden');
+      document.getElementById('modal-content').innerHTML = `
+        <h3>发起投票</h3>
+        <div class="form-group"><label>标题</label><input id="v-title" placeholder="投票标题"></div>
+        <div class="form-group"><label>关联知识点</label><select id="v-kpId">${kpOptions}</select></div>
+        <div class="form-group"><label>选项 (每行一个, 正确答案前加 *)</label>
+          <textarea id="v-options" rows="4" placeholder="* 正确选项A&#10;错误选项B&#10;错误选项C"></textarea>
+          <small style="color:var(--text-light)">以 * 开头表示正确答案</small>
+        </div>
+        <div style="display:flex;gap:0.5rem;justify-content:flex-end">
+          <button class="btn btn-outline btn-sm" onclick="closeModal()">取消</button>
+          <button class="btn btn-primary btn-sm" onclick="createVote()">发起</button>
+        </div>
+      `;
+    });
+  }
+
+  async function createVote() {
+    const title = document.getElementById('v-title').value.trim();
+    const knowledgePointId = parseInt(document.getElementById('v-kpId').value);
+    const rawOptions = document.getElementById('v-options').value.trim().split('\n').filter(Boolean);
+    if (!title) return alert('请输入标题');
+    if (rawOptions.length < 2) return alert('至少需要2个选项');
+
+    const options = rawOptions.map(line => {
+      const isCorrect = line.startsWith('*');
+      return { text: isCorrect ? line.substring(1).trim() : line.trim(), isCorrect };
+    });
+
+    try {
+      await API.createVote({ title, courseId, knowledgePointId, options }, user.id);
+      closeModal();
+      loadAll();
+    } catch (err) { alert(err.message); }
+  }
+
+  async function viewVote(sessionId) {
+    try {
+      const res = await API.getVoteDetail(sessionId);
+      const v = res.data;
+      const card = document.getElementById('vote-detail-card');
+      card.style.display = 'block';
+      document.getElementById('vote-detail-title').textContent = '📋 ' + v.title;
+
+      const totalVotes = v.totalVotes;
+      let html = `<p style="color:var(--text-light);margin-bottom:0.5rem">
+        状态: <span class="badge ${v.status==='ACTIVE'?'badge-active':'badge-closed'}">${v.status==='ACTIVE'?'进行中':'已关闭'}</span>
+        | 总票数: ${totalVotes}</p>`;
+
+      v.options.forEach(opt => {
+        const pct = totalVotes > 0 ? Math.round(opt.voteCount / totalVotes * 100) : 0;
+        html += `<div style="margin-bottom:0.5rem">
+          <div style="display:flex;justify-content:space-between;font-size:0.9rem">
+            <span>${escHtml(opt.text)}</span><span>${opt.voteCount} 票 (${pct}%)</span>
+          </div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
+        </div>`;
+      });
+
+      if (user.role === 'STUDENT' && v.status === 'ACTIVE') {
+        html += '<hr style="margin:1rem 0">';
+        html += '<p style="font-weight:600;margin-bottom:0.5rem">请选择你的答案：</p>';
+        v.options.forEach(opt => {
+          html += `<div class="option-card" onclick="selectOption(this, ${opt.id})">
+            <span class="option-radio"></span>
+            <span>${escHtml(opt.text)}</span>
+          </div>`;
+        });
+        html += `<button class="btn btn-success btn-sm" style="margin-top:0.5rem" id="btn-submit-vote" disabled onclick="submitVote(${sessionId})">提交投票</button>`;
+      }
+
+      document.getElementById('vote-detail-content').innerHTML = html;
+      window._selectedOptionId = null;
+    } catch (err) { alert(err.message); }
+  }
+
+  function selectOption(el, optionId) {
+    document.querySelectorAll('.option-card').forEach(c => c.classList.remove('selected'));
+    el.classList.add('selected');
+    window._selectedOptionId = optionId;
+    document.getElementById('btn-submit-vote').disabled = false;
+  }
+
+  async function submitVote(sessionId) {
+    if (!window._selectedOptionId) return;
+    try {
+      await API.castVote(sessionId, user.id, window._selectedOptionId);
+      alert('投票成功！');
+      viewVote(sessionId);
+      loadAll();
+    } catch (err) { alert(err.message); }
+  }
+
+  async function closeVote(sessionId) {
+    if (!confirm('确定关闭该投票？关闭后学生无法继续投票。')) return;
+    try {
+      await API.closeVote(sessionId, user.id);
+      loadAll();
+    } catch (err) { alert(err.message); }
+  }
+
+  function closeModal() {
+    document.getElementById('modal-overlay').classList.add('hidden');
+  }
+
+  loadAll();
+</script>
+</body>
+</html>

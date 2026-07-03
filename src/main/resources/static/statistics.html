@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数据统计 - 课堂投票系统</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="header">
+  <h1>📊 课堂投票系统</h1>
+  <span class="user-info" id="user-info"></span>
+  <button onclick="logout()">退出登录</button>
+</div>
+
+<div class="nav-tabs">
+  <a href="/courses.html">课程列表</a>
+  <a href="javascript:void(0)" onclick="goCourseDetail()">课程详情</a>
+  <a class="active" href="/statistics.html">数据统计</a>
+</div>
+
+<div class="container">
+  <h2 id="page-title" style="margin-bottom:1rem">📈 数据统计分析</h2>
+
+  <!-- 概览卡片 -->
+  <div class="card" id="overview-card">
+    <h3>课程概览</h3>
+    <div id="overview-content">加载中...</div>
+  </div>
+
+  <!-- 知识点掌握度 -->
+  <div class="card">
+    <h3>📊 各知识点掌握度</h3>
+    <div class="chart-container">
+      <canvas id="kp-chart"></canvas>
+    </div>
+    <div id="kp-table"></div>
+  </div>
+
+  <!-- 学生掌握度 -->
+  <div class="card">
+    <h3>👨‍🎓 学生掌握度排名</h3>
+    <div class="chart-container">
+      <canvas id="student-chart"></canvas>
+    </div>
+    <div id="student-table"></div>
+  </div>
+</div>
+
+<script src="/js/api.js"></script>
+<script>
+  const user = JSON.parse(sessionStorage.getItem('cvs_user'));
+  const courseId = sessionStorage.getItem('cvs_courseId');
+  if (!user) { window.location.href = '/login.html'; }
+  if (!courseId) { window.location.href = '/courses.html'; }
+
+  document.getElementById('user-info').textContent =
+    `${user.realName} (${user.role === 'TEACHER' ? '教师' : '学生'}) | ID: ${user.id}`;
+  function logout() { sessionStorage.clear(); window.location.href = '/login.html'; }
+  function goCourseDetail() { window.location.href = '/course-detail.html'; }
+
+  let kpChart = null, studentChart = null;
+
+  async function loadStats() {
+    try {
+      // 概览
+      const ovRes = await API.getOverview(courseId);
+      const ov = ovRes.data;
+      document.getElementById('overview-content').innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:1rem;text-align:center">
+          <div><div style="font-size:2rem;font-weight:700;color:var(--primary)">${ov.totalKnowledgePoints}</div><div style="color:var(--text-light);font-size:0.85rem">知识点</div></div>
+          <div><div style="font-size:2rem;font-weight:700;color:var(--primary)">${ov.totalVoteSessions}</div><div style="color:var(--text-light);font-size:0.85rem">投票次数</div></div>
+          <div><div style="font-size:2rem;font-weight:700;color:var(--primary)">${ov.totalStudents}</div><div style="color:var(--text-light);font-size:0.85rem">学生人数</div></div>
+          <div><div style="font-size:2rem;font-weight:700;color:${ov.overallMastery >= 60 ? 'var(--success)' : 'var(--danger)'}">${ov.overallMastery}%</div><div style="color:var(--text-light);font-size:0.85rem">总体掌握度</div></div>
+        </div>
+      `;
+
+      // 知识点掌握度
+      const kpRes = await API.getKpMastery(courseId);
+      renderKpChart(kpRes.data || []);
+
+      // 学生掌握度
+      const stRes = await API.getStudentMastery(courseId);
+      renderStudentChart(stRes.data || []);
+    } catch (err) {
+      alert(err.message);
+    }
+  }
+
+  function getProgressClass(rate) {
+    if (rate >= 80) return 'progress-high';
+    if (rate >= 50) return 'progress-mid';
+    return 'progress-low';
+  }
+
+  function renderKpChart(data) {
+    if (kpChart) kpChart.destroy();
+
+    const ctx = document.getElementById('kp-chart').getContext('2d');
+    kpChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: data.map(d => d.knowledgePointName),
+        datasets: [{
+          label: '掌握度 (%)',
+          data: data.map(d => d.masteryRate),
+          backgroundColor: data.map(d => d.masteryRate >= 80 ? '#22c55e' : d.masteryRate >= 50 ? '#f59e0b' : '#ef4444'),
+          borderRadius: 6
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { y: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } },
+        plugins: { legend: { display: false } }
+      }
+    });
+
+    // 表格
+    document.getElementById('kp-table').innerHTML = data.map(d => `
+      <div style="display:flex;align-items:center;gap:1rem;margin:0.5rem 0">
+        <span style="width:120px;font-size:0.9rem">${d.knowledgePointName}</span>
+        <div class="progress-bar" style="flex:1">
+          <div class="progress-fill ${getProgressClass(d.masteryRate)}" style="width:${d.masteryRate}%"></div>
+        </div>
+        <span style="width:100px;text-align:right;font-size:0.85rem">${d.correctVotes}/${d.totalVotes} (${d.masteryRate}%)</span>
+      </div>
+    `).join('');
+  }
+
+  function renderStudentChart(data) {
+    if (studentChart) studentChart.destroy();
+
+    const ctx = document.getElementById('student-chart').getContext('2d');
+    studentChart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: data.map(d => d.studentName),
+        datasets: [{
+          label: '掌握度 (%)',
+          data: data.map(d => d.masteryRate),
+          backgroundColor: data.map(d => d.masteryRate >= 80 ? '#22c55e' : d.masteryRate >= 50 ? '#f59e0b' : '#ef4444'),
+          borderRadius: 6
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: { x: { beginAtZero: true, max: 100, ticks: { callback: v => v + '%' } } },
+        plugins: { legend: { display: false } }
+      }
+    });
+
+    document.getElementById('student-table').innerHTML = data.map((d, i) => `
+      <div style="display:flex;align-items:center;gap:1rem;margin:0.5rem 0">
+        <span style="width:80px;font-size:0.9rem">${d.studentName}</span>
+        <div class="progress-bar" style="flex:1">
+          <div class="progress-fill ${getProgressClass(d.masteryRate)}" style="width:${d.masteryRate}%"></div>
+        </div>
+        <span style="width:100px;text-align:right;font-size:0.85rem">${d.correctVotes}/${d.totalVotes} (${d.masteryRate}%)</span>
+      </div>
+    `).join('');
+  }
+
+  loadStats();
+</script>
+</body>
+</html>

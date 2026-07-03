@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>课堂投票系统 - CVS</title>
+  <script>
+    // 自动跳转到登录页，如已登录则跳转课程页
+    const user = sessionStorage.getItem('cvs_user');
+    if (user) {
+      window.location.href = '/courses.html';
+    } else {
+      window.location.href = '/login.html';
+    }
+  </script>
+</head>
+<body></body>
+</html>
