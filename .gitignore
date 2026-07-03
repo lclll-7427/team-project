@@ -13,6 +13,7 @@ desktop.ini
 node_modules/
 dist/
 build/
+target/
 *.log
 
 # 环境变量与密钥(切勿提交)
